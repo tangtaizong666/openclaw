@@ -168,16 +168,31 @@ describe("createMSTeamsApp", () => {
 
     const app = await createMSTeamsApp(creds, {
       cloud: "USGov",
-      serviceUrl: "https://gov.example.us/teams/",
+      serviceUrl: "https://smba.infra.gov.teams.microsoft.us/teams/",
     });
 
     const internals = app as unknown as {
       api?: { serviceUrl?: string };
       cloud?: { botScope?: string; graphScope?: string };
     };
-    expect(internals.api?.serviceUrl).toBe("https://gov.example.us/teams");
+    expect(internals.api?.serviceUrl).toBe("https://smba.infra.gov.teams.microsoft.us/teams");
     expect(internals.cloud?.botScope).toBe("https://api.botframework.us/.default");
     expect(internals.cloud?.graphScope).toBe("https://graph.microsoft.us/.default");
+  });
+
+  it("rejects configured serviceUrls outside the Bot Framework allowlist", async () => {
+    const creds: MSTeamsCredentials = {
+      type: "secret",
+      appId: "test-app-id",
+      appPassword: "test-secret",
+      tenantId: "test-tenant",
+    };
+
+    await expect(
+      createMSTeamsApp(creds, {
+        serviceUrl: "https://attacker.example.com/teams/",
+      }),
+    ).rejects.toThrow(/Blocked Microsoft Teams serviceUrl host: attacker\.example\.com/);
   });
 
   it("uses the configured cloud serviceUrl for proactive HTTP posts", async () => {

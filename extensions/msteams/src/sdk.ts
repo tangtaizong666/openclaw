@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { normalizeBotFrameworkServiceUrl } from "./bot-framework-service-url.js";
 import type { MSTeamsCloudName } from "./cloud.js";
 import type { MSTeamsCredentials, MSTeamsFederatedCredentials } from "./token.js";
 import { buildOpenClawUserAgentFragment } from "./user-agent.js";
@@ -292,7 +293,9 @@ export async function createMSTeamsApp(
   // 2.0.11+ preserves both its own `teams.ts[apps]/<sdk-version>` identifier
   // and caller-provided User-Agent fragments when plain client headers are used.
   const cloud = options?.cloud ?? "Public";
-  const serviceUrl = options?.serviceUrl?.trim();
+  const serviceUrl = options?.serviceUrl
+    ? normalizeBotFrameworkServiceUrl(options.serviceUrl)
+    : undefined;
   const appOptions: Record<string, unknown> = {
     client: options?.httpClient ?? {
       headers: { "User-Agent": buildOpenClawUserAgentFragment() },
