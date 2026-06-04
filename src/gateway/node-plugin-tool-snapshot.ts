@@ -1,6 +1,5 @@
 /** Connected node-hosted plugin tools available to agent tool resolution. */
 import type { NodePluginToolDescriptor } from "../../packages/gateway-protocol/src/index.js";
-import { getActiveRuntimePluginRegistry } from "../plugins/active-runtime-registry.js";
 
 export type ConnectedNodePluginTool = {
   nodeId: string;
@@ -8,6 +7,22 @@ export type ConnectedNodePluginTool = {
   platform?: string;
   remoteIp?: string;
   descriptor: NodePluginToolDescriptor;
+};
+
+export type RegisteredNodePluginToolCommand = {
+  pluginId: string;
+  command: {
+    command?: string;
+    agentTool?: {
+      name?: string;
+      description?: string;
+      parameters?: unknown;
+      mcp?: {
+        server?: string;
+        tool?: string;
+      };
+    };
+  };
 };
 
 const toolsByNodeId = new Map<string, ConnectedNodePluginTool[]>();
@@ -36,10 +51,11 @@ function isProviderSafeToolName(value: string): boolean {
   return NODE_PLUGIN_TOOL_NAME_RE.test(value);
 }
 
-function listRegisteredNodePluginToolDescriptors(): Map<string, NodePluginToolDescriptor> {
-  const registry = getActiveRuntimePluginRegistry();
+export function createRegisteredNodePluginToolDescriptorMap(
+  commands?: readonly RegisteredNodePluginToolCommand[],
+): Map<string, NodePluginToolDescriptor> {
   const descriptors = new Map<string, NodePluginToolDescriptor>();
-  for (const entry of registry?.nodeHostCommands ?? []) {
+  for (const entry of commands ?? []) {
     const agentTool = entry.command.agentTool;
     const name = normalizeString(agentTool?.name);
     const description = normalizeString(agentTool?.description);
@@ -64,9 +80,9 @@ function listRegisteredNodePluginToolDescriptors(): Map<string, NodePluginToolDe
 export function normalizeNodePluginToolDescriptors(params: {
   tools?: readonly NodePluginToolDescriptor[];
   allowedCommands?: readonly string[];
+  registeredDescriptors: ReadonlyMap<string, NodePluginToolDescriptor>;
 }): NodePluginToolDescriptor[] {
   const allowedCommands = params.allowedCommands ? new Set(params.allowedCommands) : undefined;
-  const registeredToolDescriptors = listRegisteredNodePluginToolDescriptors();
   const byKey = new Map<string, NodePluginToolDescriptor>();
   for (const tool of params.tools ?? []) {
     const pluginId = normalizeString(tool.pluginId);
@@ -75,7 +91,9 @@ export function normalizeNodePluginToolDescriptors(params: {
     if (!pluginId || !isProviderSafeToolName(name) || !command) {
       continue;
     }
-    const registeredDescriptor = registeredToolDescriptors.get(`${pluginId}\0${name}\0${command}`);
+    const registeredDescriptor = params.registeredDescriptors.get(
+      `${pluginId}\0${name}\0${command}`,
+    );
     if (!registeredDescriptor) {
       continue;
     }

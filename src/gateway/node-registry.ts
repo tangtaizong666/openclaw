@@ -10,9 +10,11 @@ import {
 import type { NodePluginToolDescriptor } from "../../packages/gateway-protocol/src/index.js";
 import { logRejectedLargePayload } from "../logging/diagnostic-payload.js";
 import {
+  createRegisteredNodePluginToolDescriptorMap,
   normalizeNodePluginToolDescriptors,
   removeConnectedNodePluginTools,
   replaceConnectedNodePluginTools,
+  type RegisteredNodePluginToolCommand,
 } from "./node-plugin-tool-snapshot.js";
 import { MAX_BUFFERED_BYTES } from "./server-constants.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
@@ -104,6 +106,12 @@ export type SerializedEventPayload = {
   readonly [SERIALIZED_EVENT_PAYLOAD]: true;
 };
 
+export type NodeRegistryOptions = {
+  listRegisteredNodePluginToolCommands?:
+    | (() => readonly RegisteredNodePluginToolCommand[] | undefined)
+    | undefined;
+};
+
 /** Serialize an event payload once so fanout can reuse the same JSON string. */
 export function serializeEventPayload(payload: unknown): SerializedEventPayload | null {
   if (payload === undefined) {
@@ -186,6 +194,20 @@ export class NodeRegistry {
   private pendingInvokes = new Map<string, PendingInvoke>();
   private authorizedSystemRunEvents = new Map<string, AuthorizedSystemRunEvent>();
 
+  constructor(private readonly options: NodeRegistryOptions = {}) {}
+
+  private normalizePluginToolDescriptors(params: {
+    tools?: readonly NodePluginToolDescriptor[];
+    allowedCommands?: readonly string[];
+  }): NodePluginToolDescriptor[] {
+    return normalizeNodePluginToolDescriptors({
+      ...params,
+      registeredDescriptors: createRegisteredNodePluginToolDescriptorMap(
+        this.options.listRegisteredNodePluginToolCommands?.(),
+      ),
+    });
+  }
+
   /** Register a websocket client as the current connection for its node id. */
   register(client: GatewayWsClient, opts: { remoteIp?: string | undefined }) {
     const connect = client.connect;
@@ -216,10 +238,10 @@ export class NodeRegistry {
       typeof (connect as { pathEnv?: string }).pathEnv === "string"
         ? (connect as { pathEnv?: string }).pathEnv
         : undefined;
-    const declaredNodePluginTools = normalizeNodePluginToolDescriptors({
+    const declaredNodePluginTools = this.normalizePluginToolDescriptors({
       tools: Array.isArray(connect.nodePluginTools) ? connect.nodePluginTools : [],
     });
-    const nodePluginTools = normalizeNodePluginToolDescriptors({
+    const nodePluginTools = this.normalizePluginToolDescriptors({
       tools: declaredNodePluginTools,
       allowedCommands: commands,
     });
@@ -400,10 +422,10 @@ export class NodeRegistry {
     if (!node || node.connId !== connId) {
       return null;
     }
-    const declaredNodePluginTools = normalizeNodePluginToolDescriptors({
+    const declaredNodePluginTools = this.normalizePluginToolDescriptors({
       tools,
     });
-    const nodePluginTools = normalizeNodePluginToolDescriptors({
+    const nodePluginTools = this.normalizePluginToolDescriptors({
       tools: declaredNodePluginTools,
       allowedCommands: node.commands,
     });
@@ -438,7 +460,7 @@ export class NodeRegistry {
     const nextCommands = surface.commands.filter((command) => declaredCommands.has(command));
     node.commands = nextCommands;
     (node.client.connect as { commands?: string[] }).commands = nextCommands;
-    node.nodePluginTools = normalizeNodePluginToolDescriptors({
+    node.nodePluginTools = this.normalizePluginToolDescriptors({
       tools: node.declaredNodePluginTools,
       allowedCommands: nextCommands,
     });

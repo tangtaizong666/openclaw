@@ -938,7 +938,10 @@ export async function startGatewayServer(
     nodeUnsubscribeAll,
     broadcastVoiceWakeChanged,
     hasTalkNodeConnected,
-  } = createGatewayNodeSessionRuntime({ broadcast });
+  } = createGatewayNodeSessionRuntime({
+    broadcast,
+    listRegisteredNodePluginToolCommands: () => pluginRegistry.nodeHostCommands,
+  });
   applyGatewayLaneConcurrency(cfgAtStart);
 
   runtimeState = createGatewayServerLiveState({
